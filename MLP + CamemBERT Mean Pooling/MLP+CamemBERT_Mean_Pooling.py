@@ -4,39 +4,17 @@ import pickle
 import argparse
 import itertools
 from lxml import etree
-from itertools import repeat
 from datetime import datetime
 from operator import itemgetter
-from collections import Counter
-from joblib import Parallel, delayed
-from multiprocessing import Pool, cpu_count
 
 from sklearn.ensemble import *
-from sklearn.utils import class_weight
-from sklearn.datasets import make_blobs
-from sklearn.preprocessing import LabelEncoder
-from sklearn.utils import compute_class_weight
-from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.metrics import multilabel_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
 
 import torch
-
-from tensorflow.keras.callbacks import ModelCheckpoint
-
-import tensorflow as tf
 from tensorflow.keras import *
 from keras.models import Sequential
 from tensorflow.keras.layers import *
-from keras.preprocessing import sequence
 from tensorflow.keras.optimizers import *
-from keras.layers.embeddings import Embedding
 from tensorflow.keras.utils import to_categorical
-from keras.layers.wrappers import Bidirectional
-from keras.layers import Dense, Flatten, BatchNormalization
-from keras.layers.convolutional import Conv1D, MaxPooling1D
 from tensorflow.keras.callbacks import ModelCheckpoint
 
 from transformers import CamembertModel, CamembertTokenizer
@@ -56,16 +34,15 @@ args = parser.parse_args()
 
 fr_stopwords = open("stopwords-fr.txt","r").read().split("\n")
 
+CURRENT_DATE = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+
 tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
 camembert = CamembertModel.from_pretrained("camembert-base")
-
-# mlb = LabelEncoder()
-# mlb = MultiLabelBinarizer()
 
 CamemBERT_EMBED_SIZE = 768
 CamemBERT_MAX_TOKENS = 512
 
-EQUAL_CLASSES = True
+EQUAL_CLASSES = False
 MAX_ELEMENTS = 700
 
 count_notes = {}
@@ -76,7 +53,7 @@ def initNotesCounter():
 
 def normalize(text):
 
-    text = text.lower()
+    # text = text.lower()
 
     # Remove the URL and Lowercase
     text = re.sub(r"http\S+", "", text)
@@ -102,45 +79,30 @@ def getEmbedding768(sentence):
 def getBow(documents, mode):
 
     # Documents
-    # docs = [text for text, labels in documents]
     docs = list(map(itemgetter(0), documents))
 
     # Labels
-    # all_tags = [labels for text, labels in documents]
     all_tags = list(map(itemgetter(1), documents))
-
     all_ids = list(map(itemgetter(2), documents))
-
-    bow = None
-
-    print("Before getEmbedding")
 
     bow = []
     for doc in tqdm(docs):
         bow.append(getEmbedding768(doc))
     bow = np.array(bow)
-    # print(type(bow[0]))
-    # exit(0)
-
-    # bow = vectorizer.fit_transform(docs).toarray()
 
     # Apply Transformation
     if mode == "train":
         bow_tags = all_tags
-        # bow_tags = mlb.fit_transform(all_tags)
     elif mode == "dev":
         bow_tags = all_tags
-        # bow_tags = mlb.transform(all_tags)
     elif mode == "test":
         bow_tags = None
 
     if mode != "test":
-        print("Vector size:", str(len(bow[0])))
         bow_tags = list(itertools.chain(*bow_tags))
         classes_in = list(set(bow_tags))
-        print(bow_tags[0:2])
-        # classes_in = list(mlb.classes_)
-        print(classes_in)
+    else:
+        classes_in = []
 
     return bow, bow_tags, classes_in, all_ids, all_tags
 
@@ -149,16 +111,7 @@ def getCorpora(data, mode, nbr_elements):
     initNotesCounter()
 
     sentences = []
-
-    # pool = Pool(cpu_count())
-    # inputs_pool = list(zip(data, repeat(mode)))
-    # print(inputs_pool[0:3])
-    # sentences = pool.starmap(process, inputs_pool)
-    # pool.close()
-    # pool.join()
     
-    # sentences = Parallel(n_jobs=cpu_count())(delayed(process)(d,m) for d,m in zip(data, repeat(mode)))
-
     if mode != "test":
         data = data[0:nbr_elements]
         
@@ -191,8 +144,6 @@ def getCorpora(data, mode, nbr_elements):
 
         sentences.append(s)
             
-    print("len(sentences)")
-    print(len(sentences))
     return getBow(sentences, mode)
 
 # nbr_elements = 2
@@ -204,52 +155,39 @@ test_path_pickle  = "corporas/camembert_mean_pooling_corpora_" + "test" + "_" + 
 
 if os.path.isfile(train_path_pickle) == False and os.path.isfile(dev_path_pickle) == False and os.path.isfile(test_path_pickle) == False:
 
-    print("Load " + args.input + "train.xml")
     TRAIN = etree.parse(args.input + "train.xml")
     contentTrain = TRAIN.xpath("//comment")
-    print("CSV file Train loaded!")
-    print(len(contentTrain))
+    print("Train elements loaded: ", len(contentTrain))
 
-    print("Load " + args.input + "dev.xml")
     DEV  = etree.parse(args.input + "dev.xml")
     contentDev = DEV.xpath("//comment")
-    print("CSV file Dev loaded!")
-    print(len(contentDev))
+    print("Dev elements loaded: ", len(contentDev))
 
-    print("Load " + args.input + "test.xml")
     TEST  = etree.parse(args.input + "test.xml")
     contentTest = TEST.xpath("//comment")
-    print("CSV file Test loaded!")
-    print(len(contentTest))
-
-    # print("Load " + args.input + "test.xml")
-    # TEST  = etree.parse(args.input + "test.xml")
-    # contentReal_Test = TEST.xpath("//comment")
-    # print("CSV file Test loaded!")
-    # print(len(contentReal_Test))
+    print("Test elements loaded: ", len(contentTest))
 
     print("°"*50)
     print("Enter in PROCESS embeddings")
     print("°"*50)
 
     # TF-IDF and labels (text, [labels]) for Train
-    print("Get train")
     X, Y, labels, ids_train, all_tags_train = getCorpora(contentTrain,"train",nbr_elements)
-    print("End train")
+    print("Train computed!")
 
     with open(train_path_pickle, 'wb') as handle:
         pickle.dump((X, Y, labels, ids_train, all_tags_train), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TF-IDF and labels (text, [labels]) for Test
     X_dev, y_dev, labels_dev, ids_dev, all_tags_dev = getCorpora(contentDev,"dev",nbr_elements)
-    print("After dev")
+    print("Dev computed!")
 
     with open(dev_path_pickle, 'wb') as handle:
         pickle.dump((X_dev, y_dev, labels_dev, ids_dev, all_tags_dev), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TF-IDF and labels (text, [labels]) for Test
     X_test, y_test, labels_test, ids_test, all_tags_test = getCorpora(contentTest,"test",nbr_elements)
-    print("After test")
+    print("Test computed!")
 
     with open(test_path_pickle, 'wb') as handle:
         pickle.dump((X_test, y_test, labels_test, ids_test, all_tags_test), handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -269,10 +207,6 @@ else:
     with open(test_path_pickle, 'rb') as handle:
         (X_test, y_test, labels_test, ids_test, all_tags_test) = pickle.load(handle)
 
-# # TF-IDF and labels (text, [labels]) for Test
-# X_Real_Test, y_Real_Test, labels_Real_Test, ids_real_test = getCorpora(contentReal_Test,"real_test")
-# print("After real test")
-
 # Split into training and testing data
 X_train, y_train = X, Y
 print("split train finished")
@@ -285,7 +219,6 @@ print("classes: ", raw_labels)
 
 # Id2Labels & Labels2Ids
 y_train = [raw_labels.index(a) for a in y_train]
-# class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
 y_train = to_categorical(y_train, nb_classes)
 
 y_dev = [raw_labels.index(a) for a in y_dev]
@@ -306,40 +239,29 @@ model.add(Dense(nbr_classes, activation='softmax'))
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 print(model.summary())
 
-print("X_train / y_train:")
-print(len(X_train))
-print(len(y_train))
+OUTPUT_DIR = 'models/MLP-Mean-Pooling/' + str(CURRENT_DATE) + '/'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+BEST_PATH = OUTPUT_DIR + 'best_model.h5'
+modelCallback = ModelCheckpoint(filepath=BEST_PATH)
 
-CURRENT_DATE = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
-os.makedirs('models_cnn_camembert/' + str(CURRENT_DATE), exist_ok=True)
-modelCallback = ModelCheckpoint(filepath='models/best_model_MLP_mean_pooling_camembert.h5')
+model.fit(X_train, y_train, validation_data=(X_dev, y_dev), epochs=args.epochs, batch_size=2048, verbose=2, callbacks=[modelCallback])
 
-# unique, counts = np.unique([labels.index(a) for a in list(itertools.chain(*all_tags_train))], axis=0, return_counts=True)
-# myDict = dict(zip(unique, counts))
+# Load best model
+model = models.load_model(BEST_PATH)
 
-# classWeight = compute_class_weight('balanced', np.unique(y_train, axis=0), y_train)
-# print(classWeight)
-# classWeight = dict(enumerate(classWeight))
-# print(classWeight)
-# class_weight=classWeight
-
-model.fit(X_train, y_train, validation_data=(X_dev, y_dev), epochs=150, batch_size=2048, verbose=2, callbacks=[modelCallback])
-# model.fit(X_train, y_train, validation_data=(X_dev, y_dev), epochs=3, batch_size=1024, verbose=2, callbacks=[modelCallback])
 scores = model.evaluate(X_dev, y_dev, verbose=0)
 print("Accuracy: %.2f%%" % (scores[1]*100))
 
 
 # -----------------------------------------------------------
 
-# model = models.load_model('models/best_model_MLP_mean_pooling_camembert.h5')
-# print(model.summary())
-
 predictions = model.predict(X_test)
 real_preds = list(np.argmax(predictions, axis=1))
 
 predictions = open("MLP_mean_pooling_camembert_results.txt","w")
 for c, id in tqdm(zip(real_preds, ids_test)):
-    pred = labels[c]
+    pred = raw_labels[c]
+    # pred = labels[c]
     predictions.write(str(id) + " " + str(pred) + "\n")
 predictions.close()
 

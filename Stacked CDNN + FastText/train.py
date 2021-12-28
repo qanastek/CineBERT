@@ -1,8 +1,9 @@
+import os
 import re
 import random
 import argparse
 from lxml import etree
-from operator import itemgetter
+from datetime import datetime
 
 import numpy as np
 from tensorflow.python.keras.layers import embeddings
@@ -16,20 +17,17 @@ from nltk.corpus import stopwords
 
 import tensorflow as tf
 from tensorflow.keras import *
-from keras.models import Sequential
 from tensorflow.keras.layers import *
-from keras.preprocessing import sequence
 from tensorflow.keras.optimizers import *
 from keras.layers.embeddings import Embedding
 from tensorflow.keras.utils import to_categorical
-from keras.preprocessing.sequence import pad_sequences
-from keras.preprocessing.text import Tokenizer, one_hot
-from keras.layers import Dense, Flatten, BatchNormalization
+from keras.preprocessing.text import Tokenizer
+from keras.layers import Dense, Flatten
 from keras.layers.convolutional import Conv1D, MaxPooling1D
-from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint
+from tensorflow.keras.callbacks import ModelCheckpoint
 
 from sklearn.metrics import classification_report
-from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
+from sklearn.preprocessing import LabelEncoder
 
 print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
 
@@ -42,31 +40,24 @@ args = parser.parse_args()
 
 np.random.seed(42)
 
-print("Load " + args.input + "train.xml")
+CURRENT_DATE = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+
 TRAIN = etree.parse(args.input + "train.xml")
 contentTrain = TRAIN.xpath("//comment")
-print("XML file Train loaded!")
-print(len(contentTrain))
+print("Train elements loaded: ", len(contentTrain))
 
-print("Load " + args.input + "dev.xml")
 DEV  = etree.parse(args.input + "dev.xml")
 contentDev = DEV.xpath("//comment")
-print("XML file Dev loaded!")
-print(len(contentDev))
+print("Dev elements loaded: ", len(contentDev))
 
-print("Load " + args.input + "test.xml")
 TEST  = etree.parse(args.input + "test.xml")
 contentTest = TEST.xpath("//comment")
-print("XML file Test loaded!")
-print(len(contentTest))
+print("Test elements loaded: ", len(contentTest))
 
 random.seed(0)
 
 PAD = 0
-
 MAX_LENGTH = 300
-# MAX_LENGTH = 150
-# MAX_LENGTH = 200
 NORMALIZED = True
 EQUAL_CLASSES = False
 MAX_ELEMENTS = 5000
@@ -135,7 +126,6 @@ def getCorpora(data, mode):
 
         sentences.append(commentaire_text)
         labels.append(commentaire_note)
-        # labels.append([commentaire_note])
         ids.append(commentaire_review_id)
 
     return sentences, labels, ids
@@ -152,18 +142,9 @@ for element in tokenizer.texts_to_sequences(x_train):
     if len(element) >= MAX_LENGTH:
         x_train_res.append(element[0:MAX_LENGTH])
     else:
-
-        # shape = np.shape(element)
-        # padded_array = np.zeros((1, MAX_LENGTH))
-        # padded_array[:shape[0],:shape[1]] = element
-        # print(padded_array)
-        # print(padded_array.shape)
-        # exit(0)
         x_train_res.append(element + [PAD for i in range(MAX_LENGTH - len(element))])
 
 x_train = np.array(x_train_res)
-# x_train = np.array(tokenizer.texts_to_sequences(x_train))
-print("x_train has None ? ", np.isnan(x_train).any())
 
 x_dev_res = []
 for element in tokenizer.texts_to_sequences(x_dev):
@@ -172,9 +153,6 @@ for element in tokenizer.texts_to_sequences(x_dev):
     else:
         x_dev_res.append(element + [PAD for i in range(MAX_LENGTH - len(element))])
 x_dev = np.array(x_dev_res)
-# x_dev   = np.array(tokenizer.texts_to_sequences(x_dev))
-
-print("X_dev has None ? ", np.isnan(x_dev).any())
 
 x_test_res = []
 for element in tokenizer.texts_to_sequences(x_test):
@@ -183,9 +161,6 @@ for element in tokenizer.texts_to_sequences(x_test):
     else:
         x_test_res.append(element + [PAD for i in range(MAX_LENGTH - len(element))])
 x_test = np.array(x_test_res)
-# x_test  = np.array(tokenizer.texts_to_sequences(x_test))
-print("x_test has None ? ", np.isnan(x_test).any())
-
 
 labelEncoder = LabelEncoder()
 y_train = labelEncoder.fit_transform(y_train)
@@ -194,48 +169,28 @@ y_train = to_categorical(y_train)
 y_dev = labelEncoder.transform(y_dev)
 y_dev = to_categorical(y_dev)
 
-# y_test = labelEncoder.transform(y_test)
-# y_test = to_categorical(y_test)
-
 labels = labelEncoder.classes_
 print("labels: ", labels)
 
-# embeddings_index = pickle.load(open("fasttext/cc.fr.300.bin", "rb"))
 embeddings_index = fasttext.load_model('fasttext/cc.fr.300.bin')
 
 embedding_dim = 300
 word_index = tokenizer.word_index
 vocab_size = len(word_index) + 1
 
-# Prepare embedding matrix from pre-trained model
+# Create a empty embeddings for each tokens of the vocabulary
 embedding_matrix = np.zeros((len(word_index) + 1, embedding_dim))
+
+# For each vocabulary tokens
 for word, i in word_index.items():
     embedding_vector = embeddings_index.get_word_vector(word)
-    # embedding_vector = embeddings_index.get(word)
+    # If exist
     if embedding_vector is not None:
-        # words not found in embedding index will be all-zeros.
         embedding_matrix[i] = embedding_vector
-
-# model = Sequential()
-# model.add(Embedding(vocab_size, embedding_dim, input_length=MAX_LENGTH, weights=[embedding_matrix], trainable=False))
-# model.add(Conv1D(128, 7, activation='relu',padding='same'))
-# model.add(MaxPooling1D())
-# model.add(Conv1D(256, 5, activation='relu',padding='same'))
-# model.add(MaxPooling1D())
-# model.add(Conv1D(512, 3, activation='relu',padding='same'))
-# model.add(MaxPooling1D())
-# model.add(Flatten())
-# model.add(Dense(128, activation='relu'))
-# model.add(Dropout(0.5))
-# model.add(Dense(10, activation='sigmoid'))
-# model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['acc'])
-# print(model.summary())
 
 
 inputs = Input(shape=(MAX_LENGTH,), dtype=tf.int64)
-# inputs = Input(shape=(MAX_LENGTH,), dtype=tf.int64)
 emb = Embedding(vocab_size, embedding_dim, input_length=MAX_LENGTH, weights=[embedding_matrix], trainable=True)(inputs)
-# model.add(Embedding(len(vocab), EMBEDDING_SIZE, input_length=EMBEDDING_SIZE))
 
 x1 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(emb)
 x1 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x1)
@@ -257,30 +212,29 @@ x5 = Conv1D(embedding_dim*2, 5, activation='relu',padding='valid', strides=1)(em
 x5 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x5)
 x5 = MaxPooling1D()(x5)
 
-# print(x1.shape)
-
 x = Concatenate(axis=1)([x1,x2,x3,x4,x5])
 x = Flatten()(x)
-# print(x.shape)
 
 x = Dense(128)(x)
-# x = Dense(128)(x)
 x = Dropout(0.25)(x)
 x = ReLU()(x)
 x = Dense(10, activation='softmax')(x)
 
-model = Model(inputs=inputs, outputs=x, name="MickaCNN")
+model = Model(inputs=inputs, outputs=x, name="StackedCRDNN")
 optim = Adam(lr=0.0001, decay=1e-6)
-# optim = Adam(lr=0.0005, decay=1e-6)
-# optim = Adadelta(lr=1.0,rho=0.95,epsilon=1e-06)
 model.compile(optimizer=optim, loss='categorical_crossentropy', metrics=['acc'])
 print(model.summary())
 
-print(x_train.shape)
-print(x_dev.shape)
-print(x_test.shape)
+OUTPUT_DIR = 'models/CNN-FastText/' + str(CURRENT_DATE) + '/'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+BEST_PATH = OUTPUT_DIR + 'best_model.h5'
+modelCallback = ModelCheckpoint(filepath=BEST_PATH)
 
-history = model.fit(x_train, y_train, validation_data=(x_dev, y_dev), epochs=args.epochs, batch_size=256, shuffle=True, verbose=2)
+history = model.fit(x_train, y_train, validation_data=(x_dev, y_dev), epochs=args.epochs, batch_size=256, shuffle=True, verbose=2, callbacks=[modelCallback])
+
+# Load best model
+model = models.load_model(BEST_PATH)
+
 scores = model.evaluate(x_dev, y_dev, verbose=0)
 print("Accuracy: %.2f%%" % (scores[1]*100))
 
@@ -291,9 +245,6 @@ loss, accuracy = model.evaluate(x_dev, y_dev, verbose=False)
 print("Testing Accuracy:  {:.4f}".format(accuracy))
 
 # -----------------------------------------------------------
-
-# model = models.load_model('models/best_model_MLP_mean_pooling_camembert.h5')
-# print(model.summary())
 
 predictions = model.predict(x_test)
 real_preds = list(np.argmax(predictions, axis=1))

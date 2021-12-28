@@ -106,7 +106,8 @@ def getCorpora(data, mode):
     ids = []
 
     if mode != "test":
-        data = data[0:150000]
+        data = data[0:600000]
+        # data = data[0:150000]
         # data = data[0:50000]
         # data = data[0:7000]
 
