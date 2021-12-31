@@ -96,7 +96,8 @@ def getCorpora(data, mode):
     ids = []
 
     if mode != "test":
-        data = data[0:150000]
+        data = data[0:600000]
+        # data = data[0:150000]
         # data = data[0:50000]
         # data = data[0:7000]
 
@@ -197,19 +198,19 @@ x1 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x1
 x1 = MaxPooling1D()(x1)
 
 x2 = Conv1D(embedding_dim*2, 2, activation='relu',padding='valid', strides=1)(emb)
-x2 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x2)
+x2 = Conv1D(embedding_dim*2, 2, activation='relu',padding='valid', strides=1)(x2)
 x2 = MaxPooling1D()(x2)
 
 x3 = Conv1D(embedding_dim*2, 3, activation='relu',padding='valid', strides=1)(emb)
-x3 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x3)
+x3 = Conv1D(embedding_dim*2, 3, activation='relu',padding='valid', strides=1)(x3)
 x3 = MaxPooling1D()(x3)
 
 x4 = Conv1D(embedding_dim*2, 4, activation='relu',padding='valid', strides=1)(emb)
-x4 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x4)
+x4 = Conv1D(embedding_dim*2, 4, activation='relu',padding='valid', strides=1)(x4)
 x4 = MaxPooling1D()(x4)
 
 x5 = Conv1D(embedding_dim*2, 5, activation='relu',padding='valid', strides=1)(emb)
-x5 = Conv1D(embedding_dim*2, 1, activation='relu',padding='valid', strides=1)(x5)
+x5 = Conv1D(embedding_dim*2, 5, activation='relu',padding='valid', strides=1)(x5)
 x5 = MaxPooling1D()(x5)
 
 x = Concatenate(axis=1)([x1,x2,x3,x4,x5])
@@ -249,7 +250,7 @@ print("Testing Accuracy:  {:.4f}".format(accuracy))
 predictions = model.predict(x_test)
 real_preds = list(np.argmax(predictions, axis=1))
 
-predictions = open("CNN+FastText_results.txt","w")
+predictions = open("CNN+FastText_results_" + str(CURRENT_DATE) + ".txt","w")
 for c, id in tqdm(zip(real_preds, ids_test)):
     pred = labels[c]
     predictions.write(str(id) + " " + str(pred) + "\n")
