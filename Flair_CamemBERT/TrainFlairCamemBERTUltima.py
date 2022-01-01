@@ -29,7 +29,7 @@ args = parser.parse_args()
 
 # Training Configuration
 LR = 0.02
-MIN_BATCH_SIZE = 24
+MIN_BATCH_SIZE = 12
 EPOCHS = args.epochs
 
 # Current date formatted
@@ -50,7 +50,8 @@ LOADED_WITH_METADATA = 0
 
 TASK_NAME = 'defi_2'
 
-EQUAL_CLASSES = True
+EQUAL_CLASSES = False
+# EQUAL_CLASSES = True
 
 # [3724, 2973, 2900, 2100, 1873, 1819, 1668, 1165, 972, 806]
 MAX_ELEMENTS = 8000
@@ -72,9 +73,6 @@ def tokenizer(text):
     text = text.replace("("," ( ").replace(")"," ) ").replace("["," [ ").replace("]"," ] ").replace("{"," { ").replace("}"," } ")
     text = text.replace("!"," ! ").replace("?"," ? ").replace("*"," * ").replace("@"," @ ").replace("|"," ")
     text = text.replace("é","e").replace("è","e").replace("ê","e")
-    
-    # # Remove years
-    # text = re.sub(years, " ", text)
 
     return text
 
@@ -101,20 +99,22 @@ def loadCorpora(data, mode):
             commentaire_note = ""
 
         if commentaire_text != None and commentaire_note != None:
-            sentences.append(commentaire_text)
+            sentences.append(commentaire_text)                    
+            notes.append(commentaire_note)                    
+            ids.append(commentaire_review_id)   
+            movies_ids.append(commentaire_movies_ids)   
+
         else:
-            sentences.append("rien à dire")    
-
-        notes.append(commentaire_note)                    
-        ids.append(commentaire_review_id)    
-        movies_ids.append(commentaire_movies_ids)   
-
-    print("len(sentences)")
-    print(len(sentences))
+            sentences.append("rien à dire")                    
+            notes.append(commentaire_note)                    
+            ids.append(commentaire_review_id)    
+            movies_ids.append(commentaire_movies_ids)   
 
     return sentences, notes, ids, movies_ids
 
 def getCorpora(data,mode):
+
+    global LOADED_WITH_METADATA
 
     sentences = []
 
@@ -125,26 +125,7 @@ def getCorpora(data,mode):
     # For each row
     for comment, label, id, movie in zip(sents, notes, ids, movies_ids):
 
-        if EQUAL_CLASSES == True and mode == "train" and count_notes[label] >= MAX_ELEMENTS:
-            continue
-        else:
-            count_notes[label] += 1
-
-        if str(movie) in films:
-
-            current_movie = films[str(movie)]
-
-            s = Sentence(
-                str(current_movie["duree"]) + " " + str(" ".join(current_movie["categories"])) + " " + tokenizer(comment)
-            )
-        else:
-
-            s = Sentence(
-                tokenizer(comment)
-            )
-
-        if label == None or len(label.strip(" ")) <= 0:
-            print("="*50, " - ", label)
+        s = Sentence(comment)
 
         if mode != "test":
             s.add_label(TASK_NAME, label)
@@ -161,6 +142,8 @@ print("Corpora processed for Train!")
 allDev = getCorpora(contentDev, "dev")
 print("Corpora processed for Dev!")
 
+print("LOADED_WITH_METADATA: ", LOADED_WITH_METADATA)
+
 # Both Corpora
 train = all
 dev   = allDev
@@ -174,6 +157,7 @@ print(corpus.obtain_statistics())
 
 label_dict = corpus.make_label_dictionary(label_type=TASK_NAME)
 
+# document_embeddings = TransformerDocumentEmbeddings("tblard/tf-allocine", fine_tune=True)
 document_embeddings = TransformerDocumentEmbeddings("camembert-base", fine_tune=True)
 
 # Load base TARS
@@ -186,8 +170,7 @@ trainer = ModelTrainer(model, corpus)
 # Train model
 trainer.train(
     base_path=output,
-    learning_rate=6e-6,
-    # learning_rate=5e-5,
+    learning_rate=5e-5,
     mini_batch_size=MIN_BATCH_SIZE,
     max_epochs=EPOCHS,
     train_with_dev=True,
